@@ -5,6 +5,7 @@ import math
 import numpy as np
 from copy import deepcopy
 from copy import copy
+
 feature_points_num = 10
 threshold = 3
 matrix_size = 3
@@ -97,9 +98,11 @@ def ranSAC(matches, kp1, kp2):
             I_most = len(inliners)
             best_inliners = inliners
     return H_best, best_inliners
-# version2
 """
+# version2
 def fillIndex(start, end, index):
+    if start+2>end:
+        return
     if index[start] == index[end]:
         mid = int((start + end) / 2)
         index[mid] = 1 - index[start]
@@ -113,7 +116,7 @@ def fillIndex(start, end, index):
         step = index[end] - index[start] / (end - start)
         for i in range(start + 1, end):
             index[i] = index[i - 1] + step
-def getBlending(img_raw, img_result):
+def getBlending(img_raw, img_result,aaaaa):
     rows, cols = img_result.shape[:2]
     result = np.zeros([rows, cols, 3], np.uint8)
     for row in range(0, rows):
@@ -137,10 +140,10 @@ def getBlending(img_raw, img_result):
         col = 0
         while (col < cols):
             if col_index[col] == 0.5:
-                start = col - 1
-                while(col_index[col] == 0.5):
+                start = col 
+                while(col < cols and col_index[col] == 0.5):
                     col += 1
-                end = col
+                end = col-1
                 fillIndex(start, end, col_index)
             else:
                 col += 1
@@ -161,7 +164,15 @@ def getBlending(img_raw, img_result):
         if result[:, col].any():  # 合成图的最右端
             right = col
             break
-    result = result[:, left: right]
+    for row in range(0, result.shape[:2][0]):
+        if result[row, :].any():  # 合成图的最左端
+            top = row
+            break
+    for row in range(result.shape[:2][0] - 1, 0, -1):
+        if result[row, :].any():  # 合成图的最左端
+            bottom = col
+            break
+    result = result[top:bottom, left: right]
     return result
 """
 # version1
@@ -320,6 +331,9 @@ def pointSampling(src, u, v):
 def toFloat(a):
     return np.asarray(a, dtype=np.float)
 
+def toInt(a):
+    return np.asarray(a, dtype=np.uint8)
+
 def bilinear(a, b, w):
     a = toFloat(a)
     b = toFloat(b)
@@ -331,10 +345,10 @@ def triangleFiltering(src, u, v):
     a = bilinear(src[x[0],y[0]], src[x[0],y[1]], u-x[0])
     b = bilinear(src[x[1],y[0]], src[x[1],y[1]], u-x[0])
     # print (a,b)
-    return bilinear(a, b, v-y[0])
+    return toInt(bilinear(a, b, v-y[0]))
 
 def warp(src, H, shape):
-    # H = np.linalg.inv(H)
+    H = np.linalg.inv(H)
     dst = np.ndarray((shape[0],shape[1],3),dtype=np.uint8)
     if H.shape != (3,3):
         print ("wrong homnography")
@@ -348,8 +362,8 @@ def warp(src, H, shape):
             # t = t / t[2]
             # v, u = t[0], t[1]
             if contain(src, u, v):
-                # dst[y,x] = pointSampling(src, u, v)
-                dst[y,x] = triangleFiltering(src, u, v)
+                dst[y,x] = pointSampling(src, u, v)
+                #dst[y,x] = triangleFiltering(src, u, v)
     return dst
 
 def count(a):
@@ -369,22 +383,24 @@ def combineImg(img1, img2, base):
     # cv2.waitKey(0)
     # exit(0)
     
-    if base == RIGTH_BASE:
-        img1 = cv2.copyMakeBorder(img1, 0, 0, img2.shape[1], 0, cv2.BORDER_CONSTANT, value=0)
-        img2 = cv2.copyMakeBorder(img2, 0, 0, img2.shape[1], 0, cv2.BORDER_CONSTANT, value=0)
+    # if base == RIGTH_BASE:
+        # img1 = cv2.copyMakeBorder(img1, 0, 0, img2.shape[1], 0, cv2.BORDER_CONSTANT, value=0)
+    img1 = cv2.copyMakeBorder(img1, img1.shape[1], img1.shape[0], img1.shape[1], img1.shape[0], cv2.BORDER_CONSTANT, value=0)
+    img2 = cv2.copyMakeBorder(img2, img1.shape[1], img1.shape[0], img1.shape[1], img1.shape[0], cv2.BORDER_CONSTANT, value=0)
     kp1, des1 = sift.detectAndCompute(img1, None)
     kp2, des2 = sift.detectAndCompute(img2, None)
-    # matches = matchFeatures(des1, des2)
-    # H, inliners = ranSAC(matches, kp1, kp2)
-    matches = matchFeatures(des2, des1)
-    H, inliners = ranSAC(matches, kp2, kp1)
+    matches = matchFeatures(des1, des2)
+    H, inliners = ranSAC(matches, kp1, kp2)
+    # matches = matchFeatures(des2, des1)
+    # H, inliners = ranSAC(matches, kp2, kp1)
+    print (H)
     H = np.asarray(H)
-    if base == RIGTH_BASE:
+    # if base == RIGTH_BASE:
         # img_result = cv2.warpPerspective(img2, H, (img1.shape[1], img1.shape[0]))
-        img_result = warp(img2, H, (img1.shape[0], img1.shape[1]))
-    else:
+    img_result = warp(img2, H, (3*img1.shape[0], 3*img1.shape[1]))
+    # else:
         # img_result = cv2.warpPerspective(img2, H, (img1.shape[1] + img2.shape[1], img1.shape[0]))
-        img_result = warp(img2, H, (img1.shape[0], img1.shape[1] + img2.shape[1]))
+    # img_result = warp(img2, H, (img1.shape[0], img1.shape[1] + img2.shape[1]))
 
     # cv2.imshow('1', img_result)
     # cv2.waitKey(0)
@@ -394,16 +410,13 @@ def combineImg(img1, img2, base):
 
 def getImgs():
     imgs = []
+    base = 'source'
     dir_path = input('Please input file name:')
-    try:
-        files = os.listdir(dir_path)
-    except:
-        dir_path = 'source004'
-        files = os.listdir(dir_path)
+    dir_path = os.path.join(base,dir_path)
+    files = os.listdir(dir_path)
     for file in files:
         imgs.append(cv2.imread(os.path.join(dir_path, file)))
     return imgs
-
 
 if __name__ == "__main__":
     match = cv2.BFMatcher()
